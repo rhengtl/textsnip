@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../models/snip_result.dart';
 import '../../services/capture_channel.dart';
 import '../../services/ocr_service.dart';
 import '../../services/overlay_service.dart';
+import '../result/result_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -95,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _startBubble();
 
     if (path == null) return;
+    final imagePath = path; // non-nullable alias — promotion lost across awaits
 
     // 6. Run OCR on the captured image.
     String text;
@@ -109,16 +112,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Phase 8 will push ResultScreen here; for now show a snackbar preview.
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            text.trim().isEmpty ? 'No text found.' : text,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResultScreen(
+            result: SnipResult(text: text, imagePath: imagePath),
           ),
-          duration: const Duration(seconds: 4),
         ),
       );
     }
