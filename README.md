@@ -1,4 +1,4 @@
-# textsnip
+# TextSnip
 
 A new Flutter project.
 
