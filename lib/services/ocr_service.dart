@@ -1,2 +1,30 @@
-// ML Kit text recognition wrapper — Phase 7
-class OcrService {}
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+
+class OcrService {
+  final _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+
+  /// Returns the full recognised text, newline-joined across blocks and lines.
+  Future<String> extractText(String imagePath) async {
+    final result = await _recognizer.processImage(
+      InputImage.fromFilePath(imagePath),
+    );
+    return result.text;
+  }
+
+  /// Returns each recognised line as a separate string, preserving reading order.
+  Future<List<String>> extractLines(String imagePath) async {
+    final result = await _recognizer.processImage(
+      InputImage.fromFilePath(imagePath),
+    );
+    return [
+      for (final block in result.blocks)
+        for (final line in block.lines) line.text,
+    ];
+  }
+
+  /// Must be called when the service is no longer needed to release the
+  /// native ML Kit recogniser. Reusing a single instance across snips
+  /// (rather than creating one per call) is intentional — it avoids the
+  /// cold-start cost of loading the model each time.
+  Future<void> dispose() => _recognizer.close();
+}

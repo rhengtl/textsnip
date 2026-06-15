@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/capture_channel.dart';
+import '../../services/ocr_service.dart';
 import '../../services/overlay_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _overlay = OverlayService();
   final _capture = CaptureChannel();
+  final _ocr = OcrService();
   StreamSubscription<dynamic>? _subscription;
   bool _bubbleActive = false;
   bool _isCapturing = false;
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _ocr.dispose();
     super.dispose();
   }
 
@@ -91,10 +94,32 @@ class _HomeScreenState extends State<HomeScreen> {
     // 5. Restore the bubble.
     await _startBubble();
 
-    // 6. Phase 7 will navigate to the OCR result screen; for now show the path.
-    if (path != null && mounted) {
+    if (path == null) return;
+
+    // 6. Run OCR on the captured image.
+    String text;
+    try {
+      text = await _ocr.extractText(path);
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('OCR failed: $e')),
+        );
+      }
+      return;
+    }
+
+    // Phase 8 will push ResultScreen here; for now show a snackbar preview.
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Captured: $path')),
+        SnackBar(
+          content: Text(
+            text.trim().isEmpty ? 'No text found.' : text,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          duration: const Duration(seconds: 4),
+        ),
       );
     }
   }
