@@ -111,7 +111,7 @@ class _WelcomePage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Spacer(),
-        Icon(Icons.crop, size: 64, color: theme.colorScheme.primary),
+        Image.asset('TextSnip.png', width: 80, height: 80),
         const SizedBox(height: 24),
         Text(
           'Welcome to TextSnip',

@@ -162,7 +162,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final busy = _state != _SnipState.idle;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('TextSnip'), centerTitle: false),
+      appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Image.asset('TextSnip.png'),
+        ),
+        title: const Text('TextSnip'),
+        centerTitle: false,
+      ),
       body: SafeArea(
         child: Center(
           child: Padding(

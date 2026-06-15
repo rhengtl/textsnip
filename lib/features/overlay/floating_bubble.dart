@@ -20,7 +20,14 @@ class FloatingBubble extends StatelessWidget {
             BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4)),
           ],
         ),
-        child: const Icon(Icons.crop, color: Colors.white, size: 28),
+        child: ClipOval(
+          child: Image.asset(
+            'TextSnip.png',
+            width: 56,
+            height: 56,
+            fit: BoxFit.cover,
+          ),
+        ),
       ),
     );
   }
