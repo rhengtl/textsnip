@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app.dart';
-import 'features/overlay/floating_bubble.dart';
+import 'features/overlay/overlay_root.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +14,6 @@ void overlayMain() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: Material(color: Colors.transparent, child: FloatingBubble()),
+    home: Material(color: Colors.transparent, child: OverlayRoot()),
   ));
 }

@@ -15,6 +15,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _capture = CaptureChannel();
   StreamSubscription<dynamic>? _subscription;
   bool _bubbleActive = false;
+  bool _isCapturing = false;
 
   @override
   void initState() {
@@ -40,32 +41,60 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _onSnipRequested() async {
+    if (_isCapturing || !mounted) return;
+    _isCapturing = true;
+    try {
+      await _runSnipFlow();
+    } finally {
+      _isCapturing = false;
+    }
+  }
+
+  Future<void> _runSnipFlow() async {
     if (!mounted) return;
 
-    // Phase 6 replaces this fixed rect with the user-drawn selection.
-    // For now, capture a centred 60 % × 40 % region to exercise the full pipeline.
-    final size = MediaQuery.sizeOf(context);
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    final logW = size.width * 0.6;
-    final logH = size.height * 0.4;
-    final left = ((size.width - logW) / 2 * dpr).round();
-    final top = ((size.height - logH) / 2 * dpr).round();
+    // 1. Expand overlay to full screen and wait for user to draw a region.
+    final screenSize = MediaQuery.sizeOf(context);
+    final regionData = await _overlay.startRegionSelection(screenSize);
 
+    // 2. Close overlay before capturing so it isn't in the frame.
+    await _overlay.hideBubble();
+    if (mounted) setState(() => _bubbleActive = false);
+
+    if (regionData == null) {
+      // User cancelled — restore the bubble and stop.
+      await _startBubble();
+      return;
+    }
+
+    // 3. Brief delay to let the overlay clear from the screen.
+    await Future.delayed(const Duration(milliseconds: 80));
+
+    // 4. Convert logical-pixel rect to physical pixels and capture.
+    final dpr = (regionData['dpr'] as num).toDouble();
+    String? path;
     try {
-      final path = await _capture.captureRegion(
-        left: left,
-        top: top,
-        width: (logW * dpr).round(),
-        height: (logH * dpr).round(),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(path != null ? 'Captured: $path' : 'Capture returned no path')),
+      path = await _capture.captureRegion(
+        left:   ((regionData['left']   as num) * dpr).round(),
+        top:    ((regionData['top']    as num) * dpr).round(),
+        width:  ((regionData['width']  as num) * dpr).round(),
+        height: ((regionData['height'] as num) * dpr).round(),
       );
     } on Exception catch (e) {
-      if (!mounted) return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Capture failed: $e')),
+        );
+      }
+    }
+
+    // 5. Restore the bubble.
+    await _startBubble();
+
+    // 6. Phase 7 will navigate to the OCR result screen; for now show the path.
+    if (path != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Capture failed: $e')),
+        SnackBar(content: Text('Captured: $path')),
       );
     }
   }
@@ -109,7 +138,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 FilledButton.icon(
                   icon: Icon(_bubbleActive ? Icons.stop : Icons.play_arrow),
                   label: Text(_bubbleActive ? 'Stop bubble' : 'Start bubble'),
-                  onPressed: _bubbleActive ? _stopBubble : _startBubble,
+                  onPressed: _isCapturing
+                      ? null
+                      : (_bubbleActive ? _stopBubble : _startBubble),
                 ),
               ],
             ),
