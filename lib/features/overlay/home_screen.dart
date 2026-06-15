@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../models/snip_result.dart';
 import '../../services/capture_channel.dart';
 import '../../services/ocr_service.dart';
 import '../../services/overlay_service.dart';
 import '../result/result_screen.dart';
+
+enum _SnipState { idle, selectingRegion, capturing, recognising }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _ocr = OcrService();
   StreamSubscription<dynamic>? _subscription;
   bool _bubbleActive = false;
-  bool _isCapturing = false;
+  _SnipState _state = _SnipState.idle;
 
   @override
   void initState() {
@@ -46,19 +49,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _onSnipRequested() async {
-    if (_isCapturing || !mounted) return;
-    _isCapturing = true;
+    if (_state != _SnipState.idle || !mounted) return;
+    if (mounted) setState(() => _state = _SnipState.selectingRegion);
     try {
       await _runSnipFlow();
     } finally {
-      _isCapturing = false;
+      if (mounted) setState(() => _state = _SnipState.idle);
     }
   }
 
   Future<void> _runSnipFlow() async {
     if (!mounted) return;
 
-    // 1. Expand overlay to full screen and wait for user to draw a region.
+    // 1. Expand overlay to full screen and wait for the user to draw a region.
     final screenSize = MediaQuery.sizeOf(context);
     final regionData = await _overlay.startRegionSelection(screenSize);
 
@@ -67,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _bubbleActive = false);
 
     if (regionData == null) {
-      // User cancelled — restore the bubble and stop.
       await _startBubble();
       return;
     }
@@ -76,6 +78,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future.delayed(const Duration(milliseconds: 80));
 
     // 4. Convert logical-pixel rect to physical pixels and capture.
+    if (mounted) setState(() => _state = _SnipState.capturing);
+
     final dpr = (regionData['dpr'] as num).toDouble();
     String? path;
     try {
@@ -100,9 +104,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final imagePath = path; // non-nullable alias — promotion lost across awaits
 
     // 6. Run OCR on the captured image.
+    if (mounted) setState(() => _state = _SnipState.recognising);
+
     String text;
     try {
-      text = await _ocr.extractText(path);
+      text = await _ocr.extractText(imagePath);
     } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -110,7 +116,15 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
       return;
+    } finally {
+      // Privacy: delete the cached PNG regardless of OCR outcome.
+      try {
+        await File(imagePath).delete();
+      } catch (_) {}
     }
+
+    // 7. Bring TextSnip to the foreground (user may be in another app).
+    await _capture.bringToFront();
 
     if (mounted) {
       await Navigator.push(
@@ -124,9 +138,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String get _statusLabel => switch (_state) {
+        _SnipState.idle =>
+          _bubbleActive ? 'Bubble is active' : 'Bubble is inactive',
+        _SnipState.selectingRegion => 'Selecting region…',
+        _SnipState.capturing => 'Capturing…',
+        _SnipState.recognising => 'Recognising text…',
+      };
+
+  String get _statusSubtitle => switch (_state) {
+        _SnipState.idle => _bubbleActive
+            ? 'Tap the floating button over any app to start a snip.'
+            : 'Start the bubble to begin capturing text.',
+        _SnipState.selectingRegion =>
+          'Draw a rectangle around the text you want to extract.',
+        _SnipState.capturing => 'Taking a screenshot of the selected region.',
+        _SnipState.recognising => 'Running on-device text recognition.',
+      };
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final busy = _state != _SnipState.idle;
+
     return Scaffold(
       appBar: AppBar(title: const Text('TextSnip'), centerTitle: false),
       body: SafeArea(
@@ -136,34 +170,42 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  _bubbleActive
-                      ? Icons.radio_button_on
-                      : Icons.radio_button_off,
-                  size: 64,
-                  color: _bubbleActive
-                      ? Colors.green.shade600
-                      : theme.colorScheme.outline,
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: busy
+                      ? const SizedBox(
+                          key: ValueKey('progress'),
+                          width: 64,
+                          height: 64,
+                          child: CircularProgressIndicator(strokeWidth: 3),
+                        )
+                      : Icon(
+                          key: const ValueKey('icon'),
+                          _bubbleActive
+                              ? Icons.radio_button_on
+                              : Icons.radio_button_off,
+                          size: 64,
+                          color: _bubbleActive
+                              ? Colors.green.shade600
+                              : theme.colorScheme.outline,
+                        ),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  _bubbleActive ? 'Bubble is active' : 'Bubble is inactive',
-                  style: theme.textTheme.titleMedium,
-                ),
+                Text(_statusLabel, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
                 Text(
-                  _bubbleActive
-                      ? 'Tap the floating button over any app to start a snip.'
-                      : 'Start the bubble to begin capturing text.',
+                  _statusSubtitle,
                   style: theme.textTheme.bodyMedium
                       ?.copyWith(color: theme.colorScheme.outline),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
                 FilledButton.icon(
-                  icon: Icon(_bubbleActive ? Icons.stop : Icons.play_arrow),
-                  label: Text(_bubbleActive ? 'Stop bubble' : 'Start bubble'),
-                  onPressed: _isCapturing
+                  icon: Icon(
+                      _bubbleActive && !busy ? Icons.stop : Icons.play_arrow),
+                  label: Text(
+                      _bubbleActive && !busy ? 'Stop bubble' : 'Start bubble'),
+                  onPressed: busy
                       ? null
                       : (_bubbleActive ? _stopBubble : _startBubble),
                 ),

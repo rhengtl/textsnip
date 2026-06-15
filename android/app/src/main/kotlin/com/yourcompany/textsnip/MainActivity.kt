@@ -31,6 +31,14 @@ class MainActivity : FlutterActivity() {
                             requestCode
                         )
                     }
+                    "bringToFront" -> {
+                        startActivity(
+                            Intent(this, MainActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            }
+                        )
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

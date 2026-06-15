@@ -54,6 +54,12 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
 
+        <!-- Bundle the Latin OCR model at install time so first-use OCR
+             is not gated on a Play Services download. -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
