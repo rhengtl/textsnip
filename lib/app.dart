@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'features/onboarding/onboarding_screen.dart';
+import 'features/overlay/home_screen.dart';
 import 'services/permission_service.dart';
 
 class TextSnipApp extends StatelessWidget {
@@ -18,7 +19,6 @@ class TextSnipApp extends StatelessWidget {
   }
 }
 
-/// Checks permissions on startup and routes to onboarding if needed.
 class _PermissionGate extends StatefulWidget {
   const _PermissionGate();
 
@@ -42,43 +42,13 @@ class _PermissionGateState extends State<_PermissionGate> {
       future: _check,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox.shrink();
-        if (snapshot.data!) return const _HomeScreen();
+        if (snapshot.data!) return const HomeScreen();
         return OnboardingScreen(
           onComplete: () => setState(() {
             _check = Future.value(true);
           }),
         );
       },
-    );
-  }
-}
-
-// Placeholder home screen — will be replaced when the overlay is wired up (Phase 4).
-class _HomeScreen extends StatelessWidget {
-  const _HomeScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.crop, size: 72, color: theme.colorScheme.primary),
-              const SizedBox(height: 24),
-              Text('TextSnip is ready',
-                  style: theme.textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Text('The floating button will appear here in Phase 4.',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.outline)),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
