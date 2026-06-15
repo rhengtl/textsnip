@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../services/capture_channel.dart';
 import '../../services/overlay_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -11,6 +12,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _overlay = OverlayService();
+  final _capture = CaptureChannel();
   StreamSubscription<dynamic>? _subscription;
   bool _bubbleActive = false;
 
@@ -37,11 +39,35 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _bubbleActive = false);
   }
 
-  void _onSnipRequested() {
-    // Phase 5 will navigate to the capture flow here.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Snip triggered — capture coming in Phase 5')),
-    );
+  Future<void> _onSnipRequested() async {
+    if (!mounted) return;
+
+    // Phase 6 replaces this fixed rect with the user-drawn selection.
+    // For now, capture a centred 60 % × 40 % region to exercise the full pipeline.
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final logW = size.width * 0.6;
+    final logH = size.height * 0.4;
+    final left = ((size.width - logW) / 2 * dpr).round();
+    final top = ((size.height - logH) / 2 * dpr).round();
+
+    try {
+      final path = await _capture.captureRegion(
+        left: left,
+        top: top,
+        width: (logW * dpr).round(),
+        height: (logH * dpr).round(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(path != null ? 'Captured: $path' : 'Capture returned no path')),
+      );
+    } on Exception catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Capture failed: $e')),
+      );
+    }
   }
 
   @override
@@ -82,8 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 32),
                 FilledButton.icon(
                   icon: Icon(_bubbleActive ? Icons.stop : Icons.play_arrow),
-                  label:
-                      Text(_bubbleActive ? 'Stop bubble' : 'Start bubble'),
+                  label: Text(_bubbleActive ? 'Stop bubble' : 'Start bubble'),
                   onPressed: _bubbleActive ? _stopBubble : _startBubble,
                 ),
               ],
