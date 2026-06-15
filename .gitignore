@@ -1,0 +1,67 @@
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# ─── IDE — IntelliJ / Android Studio ─────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ─── IDE — VS Code ───────────────────────────────────────────────────────────
+.vscode/
+
+# ─── IDE — Misc ──────────────────────────────────────────────────────────────
+.atom/
+.history
+.svn/
+.swp
+*.swp
+
+# ─── Flutter / Dart ──────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+**/doc/api/
+
+# Symbolication / obfuscation map files (generated during release builds)
+app.*.symbols
+app.*.map.json
+
+# ─── Android — build artifacts ───────────────────────────────────────────────
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+.buildlog/
+.build/
+migrate_working_dir/
+
+# ─── Android — machine-specific / sensitive ──────────────────────────────────
+# local.properties contains the Android SDK path for this machine only
+android/local.properties
+
+# key.properties holds keystore credentials — never commit
+android/key.properties
+*.keystore
+*.jks
+
+# ─── Legacy / misc ───────────────────────────────────────────────────────────
+*.class
+*.log
+*.pyc
+.swiftpm/
+**/ios/Flutter/.last_build_id
+
+# ─── Claude Code — machine-specific settings ─────────────────────────────────
+# settings.local.json holds per-machine tool permissions; never commit it.
+.claude/settings.local.json
+
+# ─── Project documentation (not part of the shipped codebase) ────────────────
+TextSnip_Development_Guide.md
