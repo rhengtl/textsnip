@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/permission_service.dart';
+import '../../theme/app_theme.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -51,13 +52,30 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: KeyedSubtree(
-              key: ValueKey(_step),
-              child: _buildStep(),
-            ),
+          padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
+          child: Column(
+            children: [
+              _StepDots(count: 3, active: _step),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.06, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: KeyedSubtree(
+                    key: ValueKey(_step),
+                    child: _buildStep(),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -98,6 +116,38 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       };
 }
 
+// ─── Shared chrome ───────────────────────────────────────────────────────────
+
+/// Row of progress pills reflecting the current onboarding step.
+class _StepDots extends StatelessWidget {
+  final int count;
+  final int active;
+  const _StepDots({required this.count, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        for (var i = 0; i < count; i++)
+          Expanded(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              height: 5,
+              margin: EdgeInsets.only(right: i == count - 1 ? 0 : 8),
+              decoration: BoxDecoration(
+                color: i <= active
+                    ? scheme.primary
+                    : scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 // ─── Pages ───────────────────────────────────────────────────────────────────
 
 class _WelcomePage extends StatelessWidget {
@@ -110,24 +160,120 @@ class _WelcomePage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Spacer(),
-        Icon(Icons.crop, size: 64, color: theme.colorScheme.primary),
-        const SizedBox(height: 24),
+        const Spacer(flex: 2),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.brandCyan.withValues(alpha: 0.10),
+            ),
+            child: Image.asset(AppAssets.logo, width: 104, height: 104),
+          ),
+        ),
+        const SizedBox(height: 32),
         Text(
           'Welcome to TextSnip',
           style: theme.textTheme.headlineMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
+              ?.copyWith(fontWeight: FontWeight.w800),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Text(
-          'Tap the floating button over any app, drag a rectangle around any '
-          'text on screen, and get a clean copy instantly.\n\n'
-          'Everything runs on your device — your screen content is never '
-          'uploaded anywhere.',
-          style: theme.textTheme.bodyLarge,
+          'Grab any text off your screen in seconds — fully on-device.',
+          style: theme.textTheme.bodyLarge
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
-        const Spacer(),
+        const SizedBox(height: 28),
+        const _FeatureRow(
+          icon: Icons.touch_app_outlined,
+          title: 'Tap the bubble',
+          subtitle: 'A floating button sits over any app.',
+        ),
+        const SizedBox(height: 18),
+        const _FeatureRow(
+          icon: Icons.crop_free,
+          title: 'Drag to select',
+          subtitle: 'Draw a box around the text you want.',
+        ),
+        const SizedBox(height: 18),
+        const _FeatureRow(
+          icon: Icons.content_copy_outlined,
+          title: 'Copy or share',
+          subtitle: 'Get clean, editable text instantly.',
+        ),
+        const Spacer(flex: 3),
+        const _PrivacyNote(),
+        const SizedBox(height: 16),
         _ActionButton(label: 'Get started', onPressed: onNext),
+      ],
+    );
+  }
+}
+
+class _FeatureRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  const _FeatureRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon,
+              size: 22, color: theme.colorScheme.onPrimaryContainer),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PrivacyNote extends StatelessWidget {
+  const _PrivacyNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(Icons.lock_outline,
+            size: 16, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Your screen content never leaves your device.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
       ],
     );
   }
@@ -153,33 +299,80 @@ class _PermissionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Spacer(),
+        const Spacer(flex: 2),
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: granted
+                ? Colors.green.withValues(alpha: 0.14)
+                : scheme.primaryContainer,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Icon(
+            granted ? Icons.check_rounded : icon,
+            size: 38,
+            color: granted ? Colors.green.shade600 : scheme.onPrimaryContainer,
+          ),
+        ),
+        const SizedBox(height: 28),
         Row(
           children: [
-            Icon(icon, size: 48, color: theme.colorScheme.primary),
-            const SizedBox(width: 12),
-            if (granted)
-              Icon(Icons.check_circle_rounded,
-                  color: Colors.green.shade600, size: 28),
+            Expanded(
+              child: Text(
+                title,
+                style: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            if (granted) _GrantedChip(),
           ],
         ),
-        const SizedBox(height: 24),
-        Text(
-          title,
-          style: theme.textTheme.headlineSmall
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
         const SizedBox(height: 16),
-        Text(description, style: theme.textTheme.bodyLarge),
-        const Spacer(),
+        Text(
+          description,
+          style: theme.textTheme.bodyLarge
+              ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
+        ),
+        const Spacer(flex: 3),
         if (granted)
           _ActionButton(label: 'Continue', onPressed: onNext ?? () {})
         else
           _ActionButton(label: 'Grant permission', onPressed: onGrant),
       ],
+    );
+  }
+}
+
+class _GrantedChip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_rounded,
+              size: 16, color: Colors.green.shade600),
+          const SizedBox(width: 5),
+          Text(
+            'Granted',
+            style: TextStyle(
+              color: Colors.green.shade700,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -193,10 +386,9 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 52,
       child: FilledButton(
         onPressed: onPressed,
-        child: Text(label, style: const TextStyle(fontSize: 16)),
+        child: Text(label),
       ),
     );
   }

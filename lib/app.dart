@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/overlay/home_screen.dart';
 import 'services/permission_service.dart';
+import 'theme/app_theme.dart';
 
 class TextSnipApp extends StatelessWidget {
   const TextSnipApp({super.key});
@@ -10,10 +11,10 @@ class TextSnipApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'TextSnip',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
       home: const _PermissionGate(),
     );
   }
@@ -56,10 +57,51 @@ class _PermissionGateState extends State<_PermissionGate>
 
   @override
   Widget build(BuildContext context) {
-    if (_allGranted == null) return const SizedBox.shrink();
-    if (_allGranted!) return const HomeScreen();
-    return OnboardingScreen(
-      onComplete: () => setState(() => _allGranted = true),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      child: switch (_allGranted) {
+        null => const _SplashScreen(),
+        true => const HomeScreen(),
+        false => OnboardingScreen(
+            onComplete: () => setState(() => _allGranted = true),
+          ),
+      },
+    );
+  }
+}
+
+/// Branded loading view shown while the initial permission check runs.
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(AppAssets.logo, width: 96, height: 96),
+            const SizedBox(height: 24),
+            Text(
+              'TextSnip',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: scheme.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
