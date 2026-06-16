@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../models/snip_result.dart';
@@ -20,31 +19,51 @@ class _HomeScreenState extends State<HomeScreen> {
   final _overlay = OverlayService();
   final _capture = CaptureChannel();
   final _ocr = OcrService();
-  StreamSubscription<dynamic>? _subscription;
   bool _bubbleActive = false;
   _SnipState _state = _SnipState.idle;
 
   @override
   void initState() {
     super.initState();
-    _subscription = _overlay.listenForSnipRequests(_onSnipRequested);
-    _startBubble();
+    _overlay.start(_onSnipRequested);
   }
 
   @override
   void dispose() {
-    _subscription?.cancel();
+    _overlay.dispose();
     _ocr.dispose();
     super.dispose();
   }
 
+  /// Start a bubble session: request screen-capture consent now (while the app
+  /// is in the foreground — it cannot be granted from the background), then show
+  /// the bubble. The projection stays alive so later snips from other apps work.
   Future<void> _startBubble() async {
+    final granted = await _capture.startCapture();
+    if (!granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Screen capture permission is required to snip text.'),
+          ),
+        );
+      }
+      return;
+    }
+    await _overlay.showBubble();
+    if (mounted) setState(() => _bubbleActive = true);
+  }
+
+  /// Re-show the bubble mid-snip without re-requesting consent (the projection
+  /// is already alive).
+  Future<void> _showBubble() async {
     await _overlay.showBubble();
     if (mounted) setState(() => _bubbleActive = true);
   }
 
   Future<void> _stopBubble() async {
     await _overlay.hideBubble();
+    await _capture.stopCapture();
     if (mounted) setState(() => _bubbleActive = false);
   }
 
@@ -66,11 +85,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final regionData = await _overlay.startRegionSelection(screenSize);
 
     // 2. Close overlay before capturing so it isn't in the frame.
-    await _overlay.hideBubble();
+    //    Position was already saved by startRegionSelection; the overlay is now
+    //    full-screen, so don't overwrite the saved bubble position here.
+    await _overlay.hideBubble(savePosition: false);
     if (mounted) setState(() => _bubbleActive = false);
 
     if (regionData == null) {
-      await _startBubble();
+      await _showBubble();
       return;
     }
 
@@ -97,8 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    // 5. Restore the bubble.
-    await _startBubble();
+    // 5. Restore the bubble (projection still alive — no re-consent).
+    await _showBubble();
 
     if (path == null) return;
     final imagePath = path; // non-nullable alias — promotion lost across awaits
@@ -162,14 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final busy = _state != _SnipState.idle;
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Image.asset('TextSnip.png'),
-        ),
-        title: const Text('TextSnip'),
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: const Text('TextSnip'), centerTitle: false),
       body: SafeArea(
         child: Center(
           child: Padding(

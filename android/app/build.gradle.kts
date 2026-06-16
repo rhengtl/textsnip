@@ -7,8 +7,8 @@ plugins {
 
 android {
     namespace = "com.yourcompany.textsnip"
-    compileSdk = 35
-    ndkVersion = "27.0.12077973"
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -40,15 +40,6 @@ android {
         }
     }
 
-    // Per-ABI APKs keep ML Kit's native libs from inflating every download.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = false
-        }
-    }
 }
 
 flutter {

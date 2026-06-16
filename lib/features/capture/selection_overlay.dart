@@ -1,5 +1,6 @@
+import 'dart:ui' show IsolateNameServer;
 import 'package:flutter/material.dart';
-import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import '../../services/overlay_ports.dart';
 
 class SelectionOverlay extends StatefulWidget {
   const SelectionOverlay({super.key});
@@ -69,7 +70,8 @@ class _SelectionOverlayState extends State<SelectionOverlay> {
       return;
     }
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    FlutterOverlayWindow.shareData({
+    final port = IsolateNameServer.lookupPortByName(kMainIsolatePort);
+    port?.send({
       'action': 'region_selected',
       'left': rect.left,
       'top': rect.top,
@@ -79,6 +81,8 @@ class _SelectionOverlayState extends State<SelectionOverlay> {
     });
   }
 
-  void _cancel() =>
-      FlutterOverlayWindow.shareData({'action': 'selection_cancelled'});
+  void _cancel() {
+    final port = IsolateNameServer.lookupPortByName(kMainIsolatePort);
+    port?.send({'action': 'selection_cancelled'});
+  }
 }

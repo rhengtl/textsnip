@@ -15,3 +15,12 @@
 
 # TextSnip native classes
 -keep class com.yourcompany.textsnip.** { *; }
+
+# Flutter deferred components (Play Core) — not used in this app
+-dontwarn com.google.android.play.core.**
+
+# ML Kit non-Latin script recognizers — only Latin is used
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.devanagari.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**

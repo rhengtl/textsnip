@@ -1,28 +1,89 @@
 import 'dart:async';
-import 'package:flutter/painting.dart';
+import 'dart:isolate';
+import 'dart:ui';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'overlay_ports.dart';
 
 class OverlayService {
-  Future<void> showBubble() => FlutterOverlayWindow.showOverlay(
-        enableDrag: true,
-        overlayTitle: 'TextSnip active',
-        overlayContent: 'Tap the bubble to capture text',
-        flag: OverlayFlag.defaultFlag,
-        visibility: NotificationVisibility.visibilityPublic,
-        positionGravity: PositionGravity.auto,
-        height: 120,
-        width: 120,
-      );
+  // Receives messages from the overlay isolate (tap, region selected/cancelled)
+  // via an IsolateNameServer-registered port — see overlay_ports.dart for why.
+  ReceivePort? _receivePort;
+  void Function()? _onStartSnip;
+  Completer<Map<String, dynamic>?>? _regionCompleter;
 
-  Future<void> hideBubble() => FlutterOverlayWindow.closeOverlay();
+  // Last known bubble position, so re-showing keeps where the user dragged it.
+  OverlayPosition? _lastPosition;
+
+  /// Begin routing overlay→main messages. Call once (e.g. in initState).
+  void start(void Function() onStartSnip) {
+    _onStartSnip = onStartSnip;
+    if (_receivePort != null) return;
+    final port = ReceivePort();
+    _receivePort = port;
+    IsolateNameServer.removePortNameMapping(kMainIsolatePort);
+    IsolateNameServer.registerPortWithName(port.sendPort, kMainIsolatePort);
+    port.listen(_handleMessage);
+  }
+
+  void dispose() {
+    IsolateNameServer.removePortNameMapping(kMainIsolatePort);
+    _receivePort?.close();
+    _receivePort = null;
+  }
+
+  void _handleMessage(dynamic message) {
+    if (message is! Map) return;
+    switch (message['action']) {
+      case 'start_snip':
+        _onStartSnip?.call();
+      case 'region_selected':
+        _regionCompleter?.complete(Map<String, dynamic>.from(message));
+        _regionCompleter = null;
+      case 'selection_cancelled':
+        _regionCompleter?.complete(null);
+        _regionCompleter = null;
+    }
+  }
+
+  Future<void> showBubble() async {
+    await FlutterOverlayWindow.showOverlay(
+      enableDrag: true,
+      overlayTitle: 'TextSnip active',
+      overlayContent: 'Tap the bubble to capture text',
+      flag: OverlayFlag.defaultFlag,
+      visibility: NotificationVisibility.visibilityPublic,
+      // none = stay exactly where the user drops it (no edge snapping).
+      positionGravity: PositionGravity.none,
+      alignment: OverlayAlignment.centerRight,
+      height: 120,
+      width: 120,
+      startPosition: _lastPosition,
+    );
+    // The overlay engine is reused across hide/show cycles, so its widget state
+    // can still be in selection mode from a previous snip. Tell it to return to
+    // bubble mode (and 120×120 size). Queued on the ReceivePort if the engine
+    // is still resuming.
+    final overlayPort = IsolateNameServer.lookupPortByName(kOverlayIsolatePort);
+    overlayPort?.send({'action': 'show_bubble'});
+  }
+
+  /// Close the bubble. When [savePosition] is true (the default), remember the
+  /// current position first so the next [showBubble] restores it. Pass false
+  /// when the overlay is not in bubble mode (e.g. mid-snip, full-screen).
+  Future<void> hideBubble({bool savePosition = true}) async {
+    if (savePosition) await _rememberPosition();
+    await FlutterOverlayWindow.closeOverlay();
+  }
+
+  Future<void> _rememberPosition() async {
+    try {
+      _lastPosition = await FlutterOverlayWindow.getOverlayPosition();
+    } catch (_) {
+      // Best-effort; keep the previous value on failure.
+    }
+  }
 
   Future<bool> get isActive => FlutterOverlayWindow.isActive();
-
-  /// Returns the subscription so the caller can cancel it on dispose.
-  StreamSubscription<dynamic> listenForSnipRequests(void Function() onStartSnip) =>
-      FlutterOverlayWindow.overlayListener.listen((event) {
-        if (event is Map && event['action'] == 'start_snip') onStartSnip();
-      });
 
   /// Tells the overlay isolate to expand to full screen and show the selection
   /// UI, then waits for the user to draw a region or cancel.
@@ -34,22 +95,15 @@ class OverlayService {
   /// Returns the region data map on success, or null if the user cancelled
   /// or the 30-second timeout elapsed.
   Future<Map<String, dynamic>?> startRegionSelection(Size screenSize) async {
-    final completer = Completer<Map<String, dynamic>?>();
-    late StreamSubscription<dynamic> sub;
-    sub = FlutterOverlayWindow.overlayListener.listen((event) {
-      if (event is! Map) return;
-      final action = event['action'] as String?;
-      if (action == 'region_selected' || action == 'selection_cancelled') {
-        sub.cancel();
-        completer.complete(
-          action == 'region_selected'
-              ? Map<String, dynamic>.from(event)
-              : null,
-        );
-      }
-    });
+    // Capture the bubble position now, before it morphs into the full-screen
+    // selector, so it can be restored after the snip completes.
+    await _rememberPosition();
 
-    await FlutterOverlayWindow.shareData({
+    final completer = Completer<Map<String, dynamic>?>();
+    _regionCompleter = completer;
+
+    final overlayPort = IsolateNameServer.lookupPortByName(kOverlayIsolatePort);
+    overlayPort?.send({
       'action': 'show_selection',
       'screenWidth': screenSize.width.round(),
       'screenHeight': screenSize.height.round(),
@@ -58,7 +112,7 @@ class OverlayService {
     return completer.future.timeout(
       const Duration(seconds: 30),
       onTimeout: () {
-        sub.cancel();
+        _regionCompleter = null;
         return null;
       },
     );

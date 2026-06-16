@@ -14,6 +14,6 @@ void overlayMain() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: Material(color: Colors.transparent, child: OverlayRoot()),
+    home: Material(type: MaterialType.transparency, child: OverlayRoot()),
   ));
 }

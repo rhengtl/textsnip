@@ -10,7 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val channelName = "textsnip/capture"
-    private var pendingResult: MethodChannel.Result? = null
+    private var startResult: MethodChannel.Result? = null
     private val requestCode = 1001
     private lateinit var projectionManager: MediaProjectionManager
 
@@ -22,14 +22,44 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    // Request MediaProjection consent while TextSnip is in the
+                    // foreground; the resulting projection is kept alive by the
+                    // service for the whole bubble session.
+                    "startCapture" -> {
+                        if (ScreenCaptureService.instance != null) {
+                            result.success(true)
+                        } else {
+                            startResult = result
+                            startActivityForResult(
+                                projectionManager.createScreenCaptureIntent(),
+                                requestCode
+                            )
+                        }
+                    }
+                    // Capture a frame from the already-running projection. Works
+                    // even when triggered from another app (no re-consent needed).
                     "captureRegion" -> {
                         @Suppress("UNCHECKED_CAST")
-                        CaptureManager.pendingRect = call.arguments as Map<String, Int>
-                        pendingResult = result
-                        startActivityForResult(
-                            projectionManager.createScreenCaptureIntent(),
-                            requestCode
-                        )
+                        val rect = call.arguments as Map<String, Int>
+                        val service = ScreenCaptureService.instance
+                        if (service == null) {
+                            result.error("NO_PROJECTION", "Capture not started", null)
+                        } else {
+                            service.capture(rect) { path ->
+                                if (path != null) {
+                                    result.success(path)
+                                } else {
+                                    result.error("CAPTURE_FAILED", "Could not capture frame", null)
+                                }
+                            }
+                        }
+                    }
+                    "stopCapture" -> {
+                        ScreenCaptureService.instance?.stop()
+                        result.success(null)
+                    }
+                    "isCaptureActive" -> {
+                        result.success(ScreenCaptureService.instance != null)
                     }
                     "bringToFront" -> {
                         startActivity(
@@ -56,13 +86,11 @@ class MainActivity : FlutterActivity() {
                 putExtra("data", data)
             }
             startForegroundService(serviceIntent)
-            ScreenCaptureService.resultCallback = { path ->
-                pendingResult?.success(path)
-                pendingResult = null
-            }
+            startResult?.success(true)
+            startResult = null
         } else {
-            pendingResult?.error("DENIED", "Screen capture permission denied", null)
-            pendingResult = null
+            startResult?.success(false)
+            startResult = null
         }
     }
 }
