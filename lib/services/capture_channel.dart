@@ -12,10 +12,6 @@ class CaptureChannel {
   /// Stops the capture service and releases the projection (ends the session).
   Future<void> stopCapture() => _channel.invokeMethod<void>('stopCapture');
 
-  /// Whether the capture service / projection is currently alive.
-  Future<bool> isCaptureActive() async =>
-      await _channel.invokeMethod<bool>('isCaptureActive') ?? false;
-
   /// Brings the TextSnip activity to the foreground.
   /// Call this after OCR completes so the result screen is visible when the
   /// user triggered the snip from inside another app.

@@ -37,9 +37,7 @@ dependencies:
   flutter_overlay_window: ^0.5.0
   permission_handler: ^12.0.3
   google_mlkit_text_recognition: ^0.15.1
-  image: ^4.9.1
   share_plus: ^13.1.0
-  flutter_riverpod: ^3.3.2
 
 dev_dependencies:
   flutter_test:
@@ -71,9 +69,6 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-
-  assets:
-    - TextSnip.png
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a

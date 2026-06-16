@@ -11,17 +11,6 @@ class OcrService {
     return result.text;
   }
 
-  /// Returns each recognised line as a separate string, preserving reading order.
-  Future<List<String>> extractLines(String imagePath) async {
-    final result = await _recognizer.processImage(
-      InputImage.fromFilePath(imagePath),
-    );
-    return [
-      for (final block in result.blocks)
-        for (final line in block.lines) line.text,
-    ];
-  }
-
   /// Must be called when the service is no longer needed to release the
   /// native ML Kit recogniser. Reusing a single instance across snips
   /// (rather than creating one per call) is intentional — it avoids the

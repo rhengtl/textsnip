@@ -152,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => ResultScreen(
-            result: SnipResult(text: text, imagePath: imagePath),
+            result: SnipResult(text: text),
           ),
         ),
       );
