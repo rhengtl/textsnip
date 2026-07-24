@@ -57,6 +57,13 @@ class _OverlayRootState extends State<OverlayRoot> {
     // so we don't have to query them from the overlay's own (120×120) view.
     // enableDrag: false — the selection overlay must not be repositionable.
     await FlutterOverlayWindow.resizeOverlay(width, height, false);
+    // resizeOverlay only changes the window size, not its position — the
+    // full-screen window would otherwise keep the floating bubble's leftover
+    // offset (e.g. shifted up by wherever the bubble was dragged), leaving a
+    // band at the opposite edge undimmed and skewing the capture coordinates.
+    // Pin it to the top-left origin so it covers the whole display and the
+    // selection rect maps 1:1 onto the captured screenshot.
+    await FlutterOverlayWindow.moveOverlay(const OverlayPosition(0, 0));
     if (mounted) setState(() => _mode = _OverlayMode.selection);
   }
 
