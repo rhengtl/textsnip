@@ -27,6 +27,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _bubbleActive = false;
   _SnipState _state = _SnipState.idle;
 
+  /// The result screen currently on top, if any — see [_showResult].
+  MaterialPageRoute<void>? _resultRoute;
+
   @override
   void initState() {
     super.initState();
@@ -229,16 +232,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // 7. Bring TextSnip to the foreground (user may be in another app).
     await _capture.bringToFront();
 
-    if (mounted) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ResultScreen(
-            result: SnipResult(text: text),
-          ),
-        ),
-      );
+    if (mounted) _showResult(text);
+  }
+
+  /// Show [text] on the result screen and return immediately, so the snip
+  /// flow (and [_state]) is finished as soon as the result is *visible* —
+  /// not when the user eventually closes it. Awaiting the route here would
+  /// keep [_state] busy and make every bubble tap a no-op until the result
+  /// screen was dismissed.
+  ///
+  /// A result screen from an earlier snip is replaced rather than stacked:
+  /// the result screen always shows the latest snip, and the back stack
+  /// doesn't grow by one page per capture.
+  void _showResult(String text) {
+    final route = MaterialPageRoute<void>(
+      builder: (_) => ResultScreen(result: SnipResult(text: text)),
+    );
+    final navigator = Navigator.of(context);
+    final previous = _resultRoute;
+    _resultRoute = route;
+    if (previous != null && previous.isActive) {
+      navigator.pushReplacement(route);
+    } else {
+      navigator.push(route);
     }
+    // Forget the route once it's gone — but only if it is still the current
+    // one; a replaced route's future completes after its successor was set.
+    route.popped.whenComplete(() {
+      if (_resultRoute == route) _resultRoute = null;
+    });
   }
 
   String get _statusLabel => switch (_state) {
