@@ -14,7 +14,7 @@
 -keep class flutter.overlay.window.** { *; }
 
 # TextSnip native classes
--keep class com.yourcompany.textsnip.** { *; }
+-keep class com.rhengtl.textsnip.** { *; }
 
 # Flutter deferred components (Play Core) — not used in this app
 -dontwarn com.google.android.play.core.**

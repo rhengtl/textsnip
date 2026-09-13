@@ -1,4 +1,4 @@
-package com.yourcompany.textsnip
+package com.rhengtl.textsnip
 
 import android.app.Activity
 import android.content.Intent

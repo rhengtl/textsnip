@@ -1,0 +1,12 @@
+# Release signing credentials. Copy this file to android/key.properties and
+# fill it in. key.properties and *.jks are git-ignored — never commit them.
+#
+# Generate a keystore with:
+#   keytool -genkeypair -v -keystore android/keystore/textsnip-release.jks \
+#       -alias textsnip -keyalg RSA -keysize 4096 -validity 10000
+#
+# storeFile is resolved relative to the android/ directory.
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=textsnip
+storeFile=keystore/textsnip-release.jks

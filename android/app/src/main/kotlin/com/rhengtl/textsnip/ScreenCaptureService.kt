@@ -1,4 +1,4 @@
-package com.yourcompany.textsnip
+package com.rhengtl.textsnip
 
 import android.app.Service
 import android.content.Intent
@@ -47,7 +47,7 @@ class ScreenCaptureService : Service() {
 
     companion object {
         private const val TAG = "ScreenCaptureService"
-        const val ACTION_STOP = "com.yourcompany.textsnip.action.STOP_CAPTURE"
+        const val ACTION_STOP = "com.rhengtl.textsnip.action.STOP_CAPTURE"
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_DATA = "data"
 
