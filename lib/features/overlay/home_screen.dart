@@ -4,6 +4,7 @@ import 'package:flutter/services.dart' show PlatformException;
 import '../../models/snip_result.dart';
 import '../../services/capture_channel.dart';
 import '../../services/ocr_service.dart';
+import '../../services/overlay_ports.dart';
 import '../../services/overlay_service.dart';
 import '../../theme/app_theme.dart';
 import '../result/result_screen.dart';
@@ -55,6 +56,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // Coming back from another app / Settings / the notification shade: the
     // session may have been ended from the notification or by the system.
     if (state == AppLifecycleState.resumed) _syncSessionState();
+  }
+
+  @override
+  void didChangeMetrics() {
+    // Rotation / system-bar changes move the edges the bubble must stay
+    // within. Read the new metrics once the frame has laid out.
+    if (!_bubbleActive) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _bubbleActive) {
+        _overlay.updateBubbleBounds(_bubbleBounds());
+      }
+    });
+  }
+
+  /// The rectangle the bubble window may occupy: the screen minus the status
+  /// and navigation bars. Only this isolate can measure that — the overlay
+  /// window is just [kBubbleWindowSize] square.
+  BubbleBounds _bubbleBounds() {
+    final size = MediaQuery.sizeOf(context);
+    final insets = MediaQuery.paddingOf(context);
+    return BubbleBounds.forScreen(
+      screenWidth: size.width,
+      screenHeight: size.height,
+      insetLeft: insets.left,
+      insetTop: insets.top,
+      insetRight: insets.right,
+      insetBottom: insets.bottom,
+    );
   }
 
   /// Reconcile [_bubbleActive] (and the bubble itself) with the native
@@ -129,7 +158,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Show the bubble and let the native side tidy the overlay plugin's
   /// notification channel. Every bubble show goes through here.
   Future<void> _presentBubble() async {
-    await _overlay.showBubble();
+    await _overlay.showBubble(
+        _bubbleBounds(), MediaQuery.devicePixelRatioOf(context));
     await _capture.overlayShown();
   }
 

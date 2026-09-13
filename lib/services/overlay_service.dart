@@ -14,6 +14,9 @@ class OverlayService {
   // Last known bubble position, so re-showing keeps where the user dragged it.
   OverlayPosition? _lastPosition;
 
+  // Bounds most recently sent to the overlay isolate.
+  BubbleBounds? _bounds;
+
   /// Begin routing overlay→main messages. Call once (e.g. in initState).
   void start(void Function() onStartSnip) {
     _onStartSnip = onStartSnip;
@@ -45,7 +48,25 @@ class OverlayService {
     }
   }
 
-  Future<void> showBubble() async {
+  /// Show the floating bubble, keeping it inside [bounds].
+  ///
+  /// The window uses a top-left gravity so its (x, y) are plain screen
+  /// offsets in logical px; that is what makes the on-screen clamping in the
+  /// overlay isolate gravity-independent. A remembered position from an
+  /// earlier show is restored (re-clamped in case the screen changed);
+  /// otherwise the bubble starts at the right edge, vertically centred.
+  ///
+  /// [devicePixelRatio] is needed because the plugin sizes the *initial*
+  /// window in raw pixels (only its resizeOverlay() speaks logical px).
+  Future<void> showBubble(BubbleBounds bounds, double devicePixelRatio) async {
+    _bounds = bounds;
+    final windowPx = (kBubbleWindowSize * devicePixelRatio).round();
+    final remembered = _lastPosition;
+    final start = remembered == null
+        ? OverlayPosition(bounds.maxX, (bounds.minY + bounds.maxY) / 2)
+        : OverlayPosition(
+            bounds.clampX(remembered.x), bounds.clampY(remembered.y));
+
     await FlutterOverlayWindow.showOverlay(
       enableDrag: true,
       overlayTitle: 'TextSnip active',
@@ -54,17 +75,35 @@ class OverlayService {
       visibility: NotificationVisibility.visibilityPublic,
       // none = stay exactly where the user drops it (no edge snapping).
       positionGravity: PositionGravity.none,
-      alignment: OverlayAlignment.centerRight,
-      height: 120,
-      width: 120,
-      startPosition: _lastPosition,
+      alignment: OverlayAlignment.topLeft,
+      height: windowPx,
+      width: windowPx,
+      startPosition: start,
     );
     // The overlay engine is reused across hide/show cycles, so its widget state
     // can still be in selection mode from a previous snip. Tell it to return to
-    // bubble mode (and 120×120 size). Queued on the ReceivePort if the engine
-    // is still resuming.
-    final overlayPort = IsolateNameServer.lookupPortByName(kOverlayIsolatePort);
-    overlayPort?.send({'action': 'show_bubble'});
+    // bubble mode (and bubble size), and give it the rectangle it may occupy.
+    // Queued on the ReceivePort if the engine is still resuming.
+    _sendToOverlay({'action': 'show_bubble', 'bounds': bounds.toMap()});
+  }
+
+  /// Push new [bounds] to a bubble that is already showing (screen rotated,
+  /// system bars changed). No-op if nothing changed.
+  void updateBubbleBounds(BubbleBounds bounds) {
+    final current = _bounds;
+    if (current != null &&
+        current.minX == bounds.minX &&
+        current.minY == bounds.minY &&
+        current.maxX == bounds.maxX &&
+        current.maxY == bounds.maxY) {
+      return;
+    }
+    _bounds = bounds;
+    _sendToOverlay({'action': 'set_bounds', 'bounds': bounds.toMap()});
+  }
+
+  void _sendToOverlay(Map<String, Object?> message) {
+    IsolateNameServer.lookupPortByName(kOverlayIsolatePort)?.send(message);
   }
 
   /// Close the bubble. When [savePosition] is true (the default), remember the
