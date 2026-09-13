@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import '../../models/snip_result.dart';
 import '../../services/capture_channel.dart';
 import '../../services/ocr_service.dart';
@@ -16,24 +17,82 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _overlay = OverlayService();
   final _capture = CaptureChannel();
   final _ocr = OcrService();
+
+  /// True while a capture session (projection + bubble + notification) is
+  /// live. Mirrors native state; see [_syncSessionState].
   bool _bubbleActive = false;
   _SnipState _state = _SnipState.idle;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _overlay.start(_onSnipRequested);
+    _capture.setOnSessionEnded(_onSessionEnded);
+    // The native services outlive this widget (permission round-trips,
+    // hot restart, activity recreation), so pick up whatever is already live.
+    _syncSessionState();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _overlay.dispose();
+    _capture.dispose();
     _ocr.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Coming back from another app / Settings / the notification shade: the
+    // session may have been ended from the notification or by the system.
+    if (state == AppLifecycleState.resumed) _syncSessionState();
+  }
+
+  /// Reconcile [_bubbleActive] (and the bubble itself) with the native
+  /// capture service, which is the source of truth for whether a session is
+  /// live. Never runs mid-snip, when the overlay is intentionally hidden.
+  Future<void> _syncSessionState() async {
+    if (_state != _SnipState.idle) return;
+    final captureActive = await _capture.isCaptureActive();
+    if (!mounted || _state != _SnipState.idle) return;
+
+    if (captureActive) {
+      // Session alive but bubble missing (e.g. the overlay isolate lost its
+      // port while this screen was unmounted): restore it.
+      if (!await _overlay.isActive) await _presentBubble();
+    } else {
+      // No projection: a bubble would be a dead button. Remove it.
+      await _overlay.hideBubble();
+    }
+    if (mounted) setState(() => _bubbleActive = captureActive);
+  }
+
+  /// The native session ended without us asking (Stop action on the
+  /// notification, projection revoked by the system, service failure). The
+  /// bubble has already been taken down natively.
+  void _onSessionEnded() {
+    if (!mounted) return;
+    final wasActive = _bubbleActive || _state != _SnipState.idle;
+    setState(() => _bubbleActive = false);
+    // Unblock a snip that is waiting for the user to draw a region; the flow
+    // then sees the session is gone and bails out cleanly.
+    _overlay.cancelRegionSelection();
+    if (wasActive) {
+      _showMessage(
+        'Screen capture session ended. Start the bubble again to keep snipping.',
+      );
+    }
+  }
+
+  void _showMessage(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   /// Start a bubble session: request screen-capture consent now (while the app
@@ -42,30 +101,48 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _startBubble() async {
     final granted = await _capture.startCapture();
     if (!granted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Screen capture permission is required to snip text.'),
-          ),
-        );
-      }
+      _showMessage('Screen capture permission is required to snip text.');
       return;
     }
+    try {
+      await _presentBubble();
+    } catch (e) {
+      // Overlay permission revoked meanwhile, or the overlay engine failed.
+      // Don't leave a headless capture session (and its notification) behind.
+      await _capture.stopCapture();
+      _showMessage('Could not show the floating bubble: $e');
+      return;
+    }
+    // The session could have ended during the await above (e.g. the user hit
+    // Stop on the notification straight away); trust native state, not ours.
+    final stillActive = await _capture.isCaptureActive();
+    if (!stillActive) {
+      await _overlay.hideBubble();
+      _showMessage('Screen capture session ended before it could start.');
+    }
+    if (mounted) setState(() => _bubbleActive = stillActive);
+  }
+
+  /// Show the bubble and let the native side tidy the overlay plugin's
+  /// notification channel. Every bubble show goes through here.
+  Future<void> _presentBubble() async {
     await _overlay.showBubble();
-    if (mounted) setState(() => _bubbleActive = true);
+    await _capture.overlayShown();
   }
 
   /// Re-show the bubble mid-snip without re-requesting consent (the projection
   /// is already alive).
   Future<void> _showBubble() async {
-    await _overlay.showBubble();
+    await _presentBubble();
     if (mounted) setState(() => _bubbleActive = true);
   }
 
   Future<void> _stopBubble() async {
+    // Mark inactive first: stopCapture() makes the native side fire
+    // sessionEnded, and _onSessionEnded must see this as a deliberate stop.
+    if (mounted) setState(() => _bubbleActive = false);
     await _overlay.hideBubble();
     await _capture.stopCapture();
-    if (mounted) setState(() => _bubbleActive = false);
   }
 
   Future<void> _onSnipRequested() async {
@@ -91,6 +168,11 @@ class _HomeScreenState extends State<HomeScreen> {
     await _overlay.hideBubble(savePosition: false);
     if (mounted) setState(() => _bubbleActive = false);
 
+    // The session may have ended while the selector was up (Stop on the
+    // notification, projection revoked). There is nothing to capture with and
+    // no bubble to restore; _onSessionEnded has already told the user.
+    if (!await _capture.isCaptureActive()) return;
+
     if (regionData == null) {
       await _showBubble();
       return;
@@ -104,6 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final dpr = (regionData['dpr'] as num).toDouble();
     String? path;
+    var sessionLost = false;
     try {
       path = await _capture.captureRegion(
         left:   ((regionData['left']   as num) * dpr).round(),
@@ -111,15 +194,17 @@ class _HomeScreenState extends State<HomeScreen> {
         width:  ((regionData['width']  as num) * dpr).round(),
         height: ((regionData['height'] as num) * dpr).round(),
       );
+    } on PlatformException catch (e) {
+      sessionLost = e.code == CaptureChannel.noProjectionCode;
+      if (!sessionLost) _showMessage('Capture failed: ${e.message ?? e.code}');
     } on Exception catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Capture failed: $e')),
-        );
-      }
+      _showMessage('Capture failed: $e');
     }
 
-    // 5. Restore the bubble (projection still alive — no re-consent).
+    // 5. Restore the bubble (projection still alive — no re-consent). If the
+    //    projection died during the capture, the native side has already
+    //    removed the bubble and _onSessionEnded handled the UI.
+    if (sessionLost) return;
     await _showBubble();
 
     if (path == null) return;
@@ -132,11 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       text = await _ocr.extractText(imagePath);
     } on Exception catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('OCR failed: $e')),
-        );
-      }
+      _showMessage('OCR failed: $e');
       return;
     } finally {
       // Privacy: delete the cached PNG regardless of OCR outcome.
@@ -489,7 +570,8 @@ class _ActiveSessionCard extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Switch to any app — the bubble stays on top, ready to snip.',
+              'Switch to any app — the bubble stays on top, ready to snip. '
+              'You can also stop it from the TextSnip notification.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onPrimaryContainer,
               ),

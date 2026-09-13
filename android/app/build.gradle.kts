@@ -42,6 +42,12 @@ android {
 
 }
 
+dependencies {
+    // NotificationCompat: lets the capture-session notification support the
+    // declared minSdk (24) without touching API 26+ channel classes directly.
+    implementation("androidx.core:core-ktx:1.13.1")
+}
+
 flutter {
     source = "../.."
 }

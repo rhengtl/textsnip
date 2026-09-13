@@ -47,6 +47,23 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (_overlayGranted && _notificationGranted) widget.onComplete();
   }
 
+  Future<void> _requestNotificationPermission() async {
+    final outcome = await _permissions.requestNotificationPermission();
+    if (!mounted) return;
+    if (outcome == PermissionRequestOutcome.openedSettings) {
+      // No in-app dialog was possible; the resume observer re-checks once the
+      // user comes back from Settings.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Turn on notifications for TextSnip in Settings, then come back.',
+          ),
+        ),
+      );
+    }
+    await _refreshStatuses();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -101,15 +118,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             icon: Icons.notifications_outlined,
             title: 'Show notifications',
             description:
-                'Android requires apps that run a background capture service '
-                'to display a persistent notification.\n\n'
-                'The notification appears only while a capture is in progress '
-                'and is dismissed immediately after.',
+                'Android requires apps that can capture the screen to show a '
+                'persistent notification while that ability is active.\n\n'
+                'TextSnip shows one for as long as the floating bubble is '
+                'running. It is silent, has a Stop button, and disappears the '
+                'moment you stop the bubble.',
             granted: _notificationGranted,
-            onGrant: () async {
-              await _permissions.requestNotificationPermission();
-              await _refreshStatuses();
-            },
+            onGrant: _requestNotificationPermission,
             onNext: _notificationGranted ? widget.onComplete : null,
           ),
         _ => const SizedBox.shrink(),

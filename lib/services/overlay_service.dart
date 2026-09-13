@@ -70,9 +70,22 @@ class OverlayService {
   /// Close the bubble. When [savePosition] is true (the default), remember the
   /// current position first so the next [showBubble] restores it. Pass false
   /// when the overlay is not in bubble mode (e.g. mid-snip, full-screen).
+  ///
+  /// Safe to call when the overlay is already gone (e.g. the native side took
+  /// it down when the capture session ended).
   Future<void> hideBubble({bool savePosition = true}) async {
+    // flutter_overlay_window's closeOverlay() never completes its result when
+    // the overlay service isn't running, so the await would hang forever.
+    if (!await isActive) return;
     if (savePosition) await _rememberPosition();
     await FlutterOverlayWindow.closeOverlay();
+  }
+
+  /// Abort an in-flight [startRegionSelection] as if the user had cancelled.
+  /// No-op when nothing is pending.
+  void cancelRegionSelection() {
+    _regionCompleter?.complete(null);
+    _regionCompleter = null;
   }
 
   Future<void> _rememberPosition() async {
