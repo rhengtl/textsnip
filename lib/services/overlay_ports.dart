@@ -8,6 +8,13 @@
 const String kMainIsolatePort = 'textsnip_main';
 const String kOverlayIsolatePort = 'textsnip_overlay';
 
+/// How long to let the window manager finish animating an overlay resize
+/// before drawing non-uniform content into it. Some ROMs (ColorOS, for one)
+/// scale the window surface from its old bounds to the new ones over roughly
+/// 400 ms; anything drawn during that time is scaled with it. Stock Android
+/// applies the new bounds instantly, where this is merely a short delay.
+const Duration kWindowResizeSettle = Duration(milliseconds: 450);
+
 /// Size (logical px) of the overlay window while it is in bubble mode. The
 /// window is square and the 60dp bubble is centred inside it, so the extra
 /// margin is the bubble's glow/shadow and a comfortable touch target.

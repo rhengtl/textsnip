@@ -61,11 +61,7 @@ class OverlayService {
   Future<void> showBubble(BubbleBounds bounds, double devicePixelRatio) async {
     _bounds = bounds;
     final windowPx = (kBubbleWindowSize * devicePixelRatio).round();
-    final remembered = _lastPosition;
-    final start = remembered == null
-        ? OverlayPosition(bounds.maxX, (bounds.minY + bounds.maxY) / 2)
-        : OverlayPosition(
-            bounds.clampX(remembered.x), bounds.clampY(remembered.y));
+    final start = _bubblePosition(bounds);
 
     await FlutterOverlayWindow.showOverlay(
       enableDrag: true,
@@ -85,6 +81,33 @@ class OverlayService {
     // bubble mode (and bubble size), and give it the rectangle it may occupy.
     // Queued on the ReceivePort if the engine is still resuming.
     _sendToOverlay({'action': 'show_bubble', 'bounds': bounds.toMap()});
+  }
+
+  /// Morph a live, full-screen selection overlay straight back into the
+  /// bubble without closing the window. Used when a selection is cancelled
+  /// or times out — nothing was captured, so the window doesn't have to be
+  /// out of the way, and a close + re-open costs over a second of service
+  /// restart. The overlay isolate handles the resize/move and the frames
+  /// shown while it happens.
+  Future<void> restoreBubble(BubbleBounds bounds) async {
+    _bounds = bounds;
+    final pos = _bubblePosition(bounds);
+    _sendToOverlay({
+      'action': 'show_bubble',
+      'bounds': bounds.toMap(),
+      'position': {'x': pos.x, 'y': pos.y},
+    });
+  }
+
+  /// Where the bubble should sit: the remembered position (re-clamped in
+  /// case the screen changed), or the right edge, vertically centred.
+  OverlayPosition _bubblePosition(BubbleBounds bounds) {
+    final remembered = _lastPosition;
+    if (remembered == null) {
+      return OverlayPosition(bounds.maxX, (bounds.minY + bounds.maxY) / 2);
+    }
+    return OverlayPosition(
+        bounds.clampX(remembered.x), bounds.clampY(remembered.y));
   }
 
   /// Push new [bounds] to a bubble that is already showing (screen rotated,

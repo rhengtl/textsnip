@@ -195,21 +195,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final screenSize = MediaQuery.sizeOf(context);
     final regionData = await _overlay.startRegionSelection(screenSize);
 
+    // The session may have ended while the selector was up (Stop on the
+    // notification, projection revoked). The native side has taken the
+    // overlay down and _onSessionEnded has told the user; make sure nothing
+    // is left on screen and stop.
+    if (!await _capture.isCaptureActive()) {
+      await _overlay.hideBubble(savePosition: false);
+      if (mounted) setState(() => _bubbleActive = false);
+      return;
+    }
+
+    if (regionData == null) {
+      // Cancelled or timed out: nothing to capture, so the window doesn't
+      // need to get out of the way. Morph it straight back into the bubble
+      // (position was saved by startRegionSelection) — far quicker than a
+      // close + re-open, and the overlay isolate controls every frame.
+      await _overlay.restoreBubble(_bubbleBounds());
+      return;
+    }
+
     // 2. Close overlay before capturing so it isn't in the frame.
     //    Position was already saved by startRegionSelection; the overlay is now
     //    full-screen, so don't overwrite the saved bubble position here.
     await _overlay.hideBubble(savePosition: false);
     if (mounted) setState(() => _bubbleActive = false);
-
-    // The session may have ended while the selector was up (Stop on the
-    // notification, projection revoked). There is nothing to capture with and
-    // no bubble to restore; _onSessionEnded has already told the user.
-    if (!await _capture.isCaptureActive()) return;
-
-    if (regionData == null) {
-      await _showBubble();
-      return;
-    }
 
     // 3. Brief delay to let the overlay clear from the screen.
     await Future.delayed(const Duration(milliseconds: 80));

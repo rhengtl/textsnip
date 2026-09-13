@@ -4,7 +4,12 @@ import '../../services/overlay_ports.dart';
 import '../../theme/app_theme.dart';
 
 class SelectionOverlay extends StatefulWidget {
-  const SelectionOverlay({super.key});
+  /// Invoked synchronously just before the result (or cancellation) is sent
+  /// to the main isolate, so the host can blank the window ahead of the
+  /// teardown that follows.
+  final VoidCallback? onFinished;
+
+  const SelectionOverlay({super.key, this.onFinished});
 
   @override
   State<SelectionOverlay> createState() => _SelectionOverlayState();
@@ -13,6 +18,19 @@ class SelectionOverlay extends StatefulWidget {
 class _SelectionOverlayState extends State<SelectionOverlay> {
   Offset? _start;
   Offset? _current;
+
+  // The scrim is drawn immediately (it scales cleanly if the window manager
+  // animates the resize) but text would be visibly stretched, so the
+  // instruction pill waits for the resize to settle and then fades in.
+  bool _chromeVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(kWindowResizeSettle, () {
+      if (mounted) setState(() => _chromeVisible = true);
+    });
+  }
 
   Rect? get _rect {
     if (_start == null || _current == null) return null;
@@ -48,16 +66,20 @@ class _SelectionOverlayState extends State<SelectionOverlay> {
             top: 40,
             left: 0,
             right: 0,
-            child: Center(child: _Pill(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.crop_free, color: Colors.white, size: 16),
-                  SizedBox(width: 8),
-                  _PillText('Drag to select  •  tap to cancel'),
-                ],
-              ),
-            )),
+            child: AnimatedOpacity(
+              opacity: _chromeVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 150),
+              child: Center(child: _Pill(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.crop_free, color: Colors.white, size: 16),
+                    SizedBox(width: 8),
+                    _PillText('Drag to select  •  tap to cancel'),
+                  ],
+                ),
+              )),
+            ),
           ),
           // Live dimension badge near the selection.
           if (rect != null && rect.width >= 8 && rect.height >= 8)
@@ -83,6 +105,7 @@ class _SelectionOverlayState extends State<SelectionOverlay> {
       return;
     }
     final dpr = MediaQuery.of(context).devicePixelRatio;
+    widget.onFinished?.call();
     final port = IsolateNameServer.lookupPortByName(kMainIsolatePort);
     port?.send({
       'action': 'region_selected',
@@ -95,6 +118,7 @@ class _SelectionOverlayState extends State<SelectionOverlay> {
   }
 
   void _cancel() {
+    widget.onFinished?.call();
     final port = IsolateNameServer.lookupPortByName(kMainIsolatePort);
     port?.send({'action': 'selection_cancelled'});
   }
